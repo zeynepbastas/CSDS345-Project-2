@@ -1,7 +1,7 @@
 #lang racket
 ;(require "simpleParser.rkt")
 
-; Group Project 1: Simple Language Interpreter
+; Group Project 2: Simple Language Interpreter
 ; Emi Hutter-DeMarco, Zeynep Bastas, Shreyhan Lakhina
 
 ;**************************************************************************************************
@@ -53,10 +53,10 @@
 ;ADDED
 (define currentInnerStatement caar)
 (define finally cadddr)
-(define catch caddr)
+(define catchblk caddr)
 (define catchvariable caaddr)
-(define try cadr)
-(define throw cadr)
+(define tryblk cadr)
+(define throwblk cadr)
 
 ;********************************************************************************************************************
 
@@ -102,12 +102,12 @@
   (lambda (var value state)
     (addBinding var value (removeBinding var state))))
 
-;assign given variable a particular value
 
 ;creates a new layer for the state
 (define inner_state
   (lambda (state)
     (list null null state)))
+
 ;pops the newest layer from the state
 (define pop_inner_state
   (lambda (state)
@@ -158,26 +158,10 @@
       ((eq? '>= (operator expression)) (M_bool-cps (firstoperand expression) state (lambda (v1) (M_bool-cps (secondoperand expression) state (lambda (v2) (return (>= v1 v2)))))))
       (else (error 'badop "Invalid Operator")))))
 
-; checks for the 5 types of statements defined and branches accordingly
-(define M_statement
-  (lambda (stmt state return next break continue throw)
-    (cond
-      ((eq? 'var (operator stmt)) (M_declare stmt state))
-      ((eq? '= (operator stmt)) (M_assign stmt state))
-      ((eq? 'begin (operator stmt)))
-      ((eq? 'if (operator stmt)) (M_if stmt state))
-      ((eq? 'while (operator stmt)) (M_while stmt state))
-      ((eq? 'break (operator stmt)))
-      ((eq? 'continue (operator stmt)))
-      ((eq? 'throw (operator stmt)))
-      ((eq? 'catch (operator stmt)))
-      ((eq? 'finally (operator stmt)))
-      ((eq? 'return (operator stmt)) (M_return stmt state))
-      (else (error 'badstmt "Invalid Statement")))))
 
 ;********************************************************************************************************************
 
-; runs when a new variable is declared
+; runs when a new variable is declared UNFINISHED
 (define M_declare
   (lambda (stmt state)
     (cond
@@ -188,7 +172,7 @@
       ; otherwise add the value to the state too
       (else (addBinding (firstoperand stmt) (M_value (secondoperand stmt) state) state)))))
 
-; runs when a variable is assigned a new value
+; runs when a variable is assigned a new value UNFINISHED
 (define M_assign
   (lambda (stmt state)
     (cond
@@ -199,9 +183,9 @@
       ; otherwise update value as expected
       (else (updateBinding (firstoperand stmt) (M_value (secondoperand stmt) state) state)))))
 
-; runs when an if statemnt is created
+; runs when an if statemnt is created UNFINISHED
 (define M_if
-  (lambda (stmt state)
+  (lambda (stmt state return next break continue throw)
     ; if condition is true, run statment1
     (if (eq? (M_boolean (condition stmt) state) #t)
         (M_statement (stmt1 stmt) state)
@@ -210,7 +194,7 @@
             state
             (M_statement (stmt2 stmt) state)))))
 
-; runs when a while statement is created
+; runs when a while statement is created UNFINISHED
 (define M_while
   (lambda (stmt state)
     ; while conditon is true, run the loop body
@@ -218,17 +202,40 @@
          (M_while stmt (M_state (loopbody stmt) state))
          state)))
 
-; runs when a return statement is issued
+; runs when a return statement is issued UNFINISHED
 (define M_return
-  (lambda (stmt state)
+  (lambda (stmt state return)
     (cond
       ; if the return statement is a number, return that number
-      ((number? (M_value (returnvalue stmt) state)) (M_value (returnvalue stmt) state))
+      ((number? (M_value (returnvalue stmt) state)) (return (M_value (returnvalue stmt) state)))
       ; if the return statement is a boolean, convert it to english true/false
-      ((eq? (M_boolean (returnvalue stmt) state) #t) 'true)
-      (else 'false))))
+      ((eq? (M_boolean (returnvalue stmt) state) #t) (return 'true))
+      (else (return 'false)))))
 
-; runs the whole program by running statements line by line
+; checks for the 5 types of statements defined and branches accordingly
+(define M_statement
+  (lambda (stmts state return next break continue throw)
+    (cond
+      ((null? stmts) (if (eq? next 'invalidnext) (pop_inner_state state) (next (pop_inner_state state))))
+      ((list? (currentstatement stmts)) (M_block stmts state return next break continue throw))
+      ((eq? 'var (operator stmts)) (M_declare stmts state))
+      ((eq? '= (operator stmts)) (M_assign stmts state))
+      ((eq? 'begin (operator stmts)) (M_statement (nextstatement stmts) (inner_state state) return next break continue throw))
+      ((eq? 'if (operator stmts)) (M_if stmts state return next break continue throw))
+      ((eq? 'break (operator stmts)) (break (pop_inner_state state)))
+      ((eq? 'continue (operator stmts)) (continue (pop_inner_state state)))
+      ((eq? 'throw (operator stmts)) (throw (M_value (throwblk stmts) state) state))
+      ((eq? 'catch (operator stmts)) (next (M_block (catchblk stmts) (inner_state state) return next break continue throw)))
+      ((eq? 'finally (operator stmts)) (M_statement (cdr stmts) (inner_state state) return next break continue throw))
+      ((eq? 'return (operator stmts)) (M_return stmts state return))
+      (else (error 'badstmt "Invalid Statement")))))
+
+;block statements UNFINISHED
+(define M_block
+  (lambda (stmts state return next break continue throw)
+    0))
+
+; runs the whole program by running statements line by line 
 (define M_state
   (lambda (tree state)
     (if (null? tree)
